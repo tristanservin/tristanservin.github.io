@@ -1,10 +1,131 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Mi primera página</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Registro de horas de estudio</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 720px; margin: 30px auto; padding: 0 16px; }
+    h1 { font-size: 22px; }
+    .row { margin: 10px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    input { padding: 8px; font-size: 14px; }
+    button { padding: 8px 12px; font-size: 14px; cursor: pointer; }
+    #daysInputs > div { margin: 8px 0; }
+    .result { margin-top: 18px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
+    .muted { color: #666; font-size: 13px; }
+  </style>
 </head>
 <body>
-    <h1>Hola Mundo 🌎</h1>
+
+  <h1>Registro de horas de estudio</h1>
+
+  <div class="row">
+    <label for="dias"><strong>¿Cuántos días quieres registrar?</strong></label>
+    <input id="dias" type="number" min="0" step="1" placeholder="Ej. 5" />
+    <button id="btnGenerar">Generar días</button>
+  </div>
+
+  <p class="muted">Después de generar, escribe las horas de cada día y presiona “Calcular”.</p>
+
+  <div id="daysInputs"></div>
+
+  <div class="row">
+    <button id="btnCalcular" disabled>Calcular</button>
+    <button id="btnLimpiar">Limpiar</button>
+  </div>
+
+  <div id="output" class="result" style="display:none;"></div>
+
+  <script>
+    const diasInput = document.getElementById("dias");
+    const btnGenerar = document.getElementById("btnGenerar");
+    const btnCalcular = document.getElementById("btnCalcular");
+    const btnLimpiar = document.getElementById("btnLimpiar");
+    const daysInputs = document.getElementById("daysInputs");
+    const output = document.getElementById("output");
+
+    function crearInputsDias(dias) {
+      daysInputs.innerHTML = "";
+      output.style.display = "none";
+      output.innerHTML = "";
+
+      if (!Number.isFinite(dias) || dias <= 0) {
+        btnCalcular.disabled = true;
+        return;
+      }
+
+      for (let i = 1; i <= dias; i++) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "row";
+
+        const label = document.createElement("label");
+        label.textContent = `Horas estudiadas el día ${i}:`;
+        label.setAttribute("for", `horas_${i}`);
+
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "0";
+        input.step = "0.25";
+        input.placeholder = "Ej. 2.5";
+        input.id = `horas_${i}`;
+        input.className = "horas";
+
+        wrapper.appendChild(label);
+        wrapper.appendChild(input);
+        daysInputs.appendChild(wrapper);
+      }
+
+      btnCalcular.disabled = false;
+    }
+
+    function calcular() {
+      const dias = parseInt(diasInput.value, 10) || 0;
+      let total_horas = 0;
+
+      const inputs = document.querySelectorAll(".horas");
+
+      // Suma segura (si el campo está vacío, cuenta como 0)
+      inputs.forEach(inp => {
+        const val = parseFloat(inp.value);
+        total_horas += Number.isFinite(val) ? val : 0;
+      });
+
+      const promedio = dias > 0 ? total_horas / dias : 0;
+
+      let nivel = "";
+      if (promedio >= 4) {
+        nivel = "Excelente disciplina";
+      } else if (promedio >= 2) {
+        nivel = "Buena disciplina";
+      } else {
+        nivel = "Necesitas mejorar tu disciplina";
+      }
+
+      output.style.display = "block";
+      output.innerHTML = `
+        <h2 style="margin:0 0 10px;">RESULTADOS</h2>
+        <p><strong>Total de horas estudiadas:</strong> ${total_horas} horas</p>
+        <p><strong>Promedio diario:</strong> ${promedio.toFixed(2)} horas</p>
+        <p><strong>Evaluación:</strong> ${nivel}</p>
+      `;
+    }
+
+    function limpiar() {
+      diasInput.value = "";
+      daysInputs.innerHTML = "";
+      output.style.display = "none";
+      output.innerHTML = "";
+      btnCalcular.disabled = true;
+    }
+
+    btnGenerar.addEventListener("click", () => {
+      const dias = parseInt(diasInput.value, 10);
+      crearInputsDias(dias);
+    });
+
+    btnCalcular.addEventListener("click", calcular);
+    btnLimpiar.addEventListener("click", limpiar);
+  </script>
+
 </body>
 </html>
