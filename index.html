@@ -3,147 +3,297 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Registro por QR</title>
+  <title>QR Inventario - Generar y Escanear</title>
+
   <style>
-    body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 0 12px; }
-    .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
-    @media (min-width: 820px) { .row { grid-template-columns: 1fr 1fr; } }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 14px; }
-    label { display:block; margin: 10px 0 6px; font-weight: 600; }
-    input, select, textarea { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ccc; }
-    button { padding: 10px 14px; border: 0; border-radius: 10px; cursor: pointer; }
+    body { font-family: Arial, sans-serif; max-width: 980px; margin: 20px auto; padding: 0 12px; }
+    .tabs { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+    .tab { padding:10px 14px; border-radius: 999px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+    .tab.active { background:#111; color:#fff; border-color:#111; }
+    .grid { display:grid; grid-template-columns: 1fr; gap:12px; }
+    @media (min-width: 900px){ .grid { grid-template-columns: 1fr 1fr; } }
+    .card { border:1px solid #ddd; border-radius:14px; padding:14px; }
+    label { display:block; margin:10px 0 6px; font-weight:600; }
+    input, textarea { width:100%; padding:10px; border-radius:10px; border:1px solid #ccc; }
+    button { padding:10px 14px; border:0; border-radius:10px; cursor:pointer; }
     .btn { background:#0b5; color:#fff; }
     .btn2 { background:#06c; color:#fff; }
     .btn3 { background:#666; color:#fff; }
-    .warn { background:#ffe9a8; padding: 10px; border-radius: 10px; }
-    .ok { background:#d8ffd8; padding: 10px; border-radius: 10px; }
-    .err { background:#ffd8d8; padding: 10px; border-radius: 10px; }
-    .muted { color:#666; font-size: .92rem; }
-    code { background:#f2f2f2; padding: 2px 6px; border-radius: 6px; }
+    .muted { color:#666; font-size:.92rem; }
+    .ok { background:#d8ffd8; padding:10px; border-radius:10px; }
+    .warn { background:#ffe9a8; padding:10px; border-radius:10px; }
+    .err { background:#ffd8d8; padding:10px; border-radius:10px; }
+    code { background:#f2f2f2; padding:2px 6px; border-radius:6px; }
+    .qrWrap { display:flex; justify-content:center; padding:10px; }
+    #qrcode canvas, #qrcode img { max-width: 260px; }
+    table { width:100%; border-collapse: collapse; }
+    td { padding:6px 0; vertical-align: top; }
+    td:first-child { font-weight: 700; width: 160px; }
+    .rowBtns{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
   </style>
 
-  <!-- Librería para escanear QR (cámara) -->
+  <!-- Escáner QR (cámara) -->
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <!-- Generador QR -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 
 <body>
-  <h1>📦 Registro y Recepción por QR</h1>
+  <h1>📦 QR de Producto: Generar y Escanear</h1>
   <p class="muted">
-    Flujo: <b>Escanear QR</b> → llenar datos → <b>Guardar</b>.  
-    En llegada: <b>Escanear QR</b> → <b>Marcar recibido</b>.
+    Funciona en GitHub Pages (HTTPS). Los datos se guardan en este navegador (localStorage).
   </p>
 
-  <div class="row">
+  <div class="tabs">
+    <button class="tab active" id="tabGen">🧾 Generar QR</button>
+    <button class="tab" id="tabScan">📷 Escanear QR</button>
+    <button class="tab" id="tabLista">📋 Lista</button>
+  </div>
+
+  <!-- GENERAR -->
+  <section id="viewGen" class="grid">
     <div class="card">
-      <h2>1) Escanear QR</h2>
-      <p class="muted">Permite cámara. En GitHub Pages funciona (HTTPS).</p>
-
-      <div id="reader" style="width:100%;"></div>
-
-      <p><b>QR detectado:</b> <code id="qrText">—</code></p>
-
-      <div style="display:flex; gap:10px; flex-wrap: wrap;">
-        <button class="btn3" id="startBtn">Iniciar cámara</button>
-        <button class="btn3" id="stopBtn" disabled>Detener</button>
-        <button class="btn2" id="buscarBtn" disabled>Buscar registro</button>
-      </div>
-
-      <p id="scanMsg" class="muted"></p>
-    </div>
-
-    <div class="card">
-      <h2>2) Datos del envío</h2>
-
-      <div class="warn">
-        Este demo guarda en el navegador (localStorage).  
-        Si borras datos del navegador o cambias de dispositivo, se pierde.
-      </div>
-
-      <form id="formEnvio">
-        <label for="vivienda">Vivienda (ej. Casa 12 / Dept 3B)</label>
-        <input id="vivienda" required placeholder="Ej: Casa 12" />
-
+      <h2>1) Llenar datos del producto</h2>
+      <form id="formGen">
         <label for="producto">Producto</label>
-        <input id="producto" required placeholder="Ej: Cemento 50kg" />
+        <input id="producto" required placeholder="Ej: Pintura blanca 1L" />
+
+        <label for="origen">¿De dónde es el producto?</label>
+        <input id="origen" required placeholder="Ej: Almacén Central / Proveedor X" />
+
+        <label for="funcion">¿Para qué funciona?</label>
+        <input id="funcion" required placeholder="Ej: Pintar paredes interiores" />
 
         <label for="destino">¿Para dónde va?</label>
-        <input id="destino" required placeholder="Ej: Bodega Norte / Obra X" />
+        <input id="destino" required placeholder="Ej: Obra A / Casa 12" />
 
         <label for="nota">Nota (opcional)</label>
-        <textarea id="nota" rows="3" placeholder="Detalles extra..."></textarea>
+        <textarea id="nota" rows="3" placeholder="Lote, color, observaciones..."></textarea>
 
-        <div style="display:flex; gap:10px; margin-top: 12px; flex-wrap: wrap;">
-          <button type="submit" class="btn" id="guardarBtn" disabled>Guardar envío</button>
-          <button type="button" class="btn2" id="recibidoBtn" disabled>Marcar como recibido</button>
-          <button type="button" class="btn3" id="limpiarBtn">Limpiar</button>
+        <div class="rowBtns">
+          <button type="submit" class="btn">Guardar y generar QR</button>
+          <button type="button" class="btn3" id="limpiarGen">Limpiar</button>
         </div>
       </form>
 
-      <div id="estadoBox" style="margin-top:12px;"></div>
+      <div id="genMsg" style="margin-top:12px;"></div>
     </div>
-  </div>
 
-  <div class="card" style="margin-top: 12px;">
-    <h2>📋 Registros guardados (este dispositivo)</h2>
-    <button class="btn3" id="refrescarLista">Refrescar lista</button>
-    <button class="btn3" id="borrarTodo">Borrar todo</button>
-    <div id="lista" style="margin-top: 10px;"></div>
-  </div>
+    <div class="card">
+      <h2>2) QR generado</h2>
+      <p><b>ID del producto:</b> <code id="idGenerado">—</code></p>
+      <div class="qrWrap"><div id="qrcode"></div></div>
+
+      <div class="warn">
+        Tip: Puedes imprimir esta pantalla o hacer captura.  
+        El QR contiene el ID; al escanearlo se ven los datos.
+      </div>
+
+      <div class="rowBtns">
+        <button class="btn2" id="copiarId" disabled>Copiar ID</button>
+        <button class="btn3" id="abrirVistaScan">Ir a escanear</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ESCANEAR -->
+  <section id="viewScan" class="grid" style="display:none;">
+    <div class="card">
+      <h2>Escanear QR</h2>
+      <p class="muted">Dale permisos a la cámara.</p>
+
+      <div id="reader" style="width:100%;"></div>
+
+      <div class="rowBtns">
+        <button class="btn3" id="startBtn">Iniciar cámara</button>
+        <button class="btn3" id="stopBtn" disabled>Detener</button>
+      </div>
+
+      <p class="muted" id="scanMsg"></p>
+      <p><b>ID escaneado:</b> <code id="idEscaneado">—</code></p>
+    </div>
+
+    <div class="card">
+      <h2>Datos del producto</h2>
+      <div id="datosBox" class="warn">Escanea un QR para ver los datos.</div>
+
+      <div class="rowBtns">
+        <button class="btn" id="marcarRecibido" disabled>✅ Marcar como recibido</button>
+        <button class="btn3" id="borrarRegistro" disabled>🗑️ Borrar registro</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- LISTA -->
+  <section id="viewLista" style="display:none;">
+    <div class="card">
+      <h2>Registros guardados (este dispositivo)</h2>
+      <div class="rowBtns">
+        <button class="btn3" id="refrescar">Refrescar</button>
+        <button class="btn3" id="borrarTodo">Borrar todo</button>
+      </div>
+      <div id="lista" style="margin-top:12px;"></div>
+      <p class="muted">
+        Nota: Si quieres que esto funcione para TODOS (varios celulares), hay que guardar en nube (Google Sheets/Firebase).
+      </p>
+    </div>
+  </section>
 
 <script>
-  // ===== Helpers =====
+  // ====== Helpers ======
   const $ = (id) => document.getElementById(id);
+  const key = (id) => "prod:" + id;
 
-  function nowISO() {
-    return new Date().toISOString();
+  function nowISO(){ return new Date().toISOString(); }
+
+  function newId(){
+    // ID corto único: fecha + random
+    return "P" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 7);
   }
 
-  function storageKey(qr) {
-    return "envio:" + qr;
+  function escapeHTML(str) {
+    return (str || "").replace(/[&<>"']/g, (m) => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    }[m]));
   }
 
-  function setMsg(type, text) {
-    const box = $("estadoBox");
-    const cls = type === "ok" ? "ok" : type === "err" ? "err" : "warn";
-    box.innerHTML = `<div class="${cls}">${text}</div>`;
+  function setBox(el, type, html){
+    el.className = type;
+    el.innerHTML = html;
   }
 
-  function getCurrentQR() {
-    return $("qrText").textContent && $("qrText").textContent !== "—"
-      ? $("qrText").textContent
-      : null;
+  // ====== Tabs ======
+  function show(view){
+    $("viewGen").style.display = view === "gen" ? "" : "none";
+    $("viewScan").style.display = view === "scan" ? "" : "none";
+    $("viewLista").style.display = view === "lista" ? "" : "none";
+
+    $("tabGen").classList.toggle("active", view === "gen");
+    $("tabScan").classList.toggle("active", view === "scan");
+    $("tabLista").classList.toggle("active", view === "lista");
   }
 
-  function resetForm() {
-    $("vivienda").value = "";
+  $("tabGen").onclick = () => show("gen");
+  $("tabScan").onclick = () => show("scan");
+  $("tabLista").onclick = () => { show("lista"); renderList(); };
+
+  $("abrirVistaScan").onclick = () => show("scan");
+
+  // ====== QR Generate ======
+  let qrObj = null;
+
+  function renderQR(text){
+    const target = $("qrcode");
+    target.innerHTML = "";
+    qrObj = new QRCode(target, {
+      text,
+      width: 260,
+      height: 260
+    });
+  }
+
+  $("formGen").addEventListener("submit", (e) => {
+    e.preventDefault();
+
+    const record = {
+      id: newId(),
+      producto: $("producto").value.trim(),
+      origen: $("origen").value.trim(),
+      funcion: $("funcion").value.trim(),
+      destino: $("destino").value.trim(),
+      nota: $("nota").value.trim(),
+      creado_en: nowISO(),
+      recibido: false,
+      recibido_en: null
+    };
+
+    if(!record.producto || !record.origen || !record.funcion || !record.destino){
+      setBox($("genMsg"), "err", "❌ Completa producto, origen, función y destino.");
+      return;
+    }
+
+    localStorage.setItem(key(record.id), JSON.stringify(record));
+
+    $("idGenerado").textContent = record.id;
+    renderQR(record.id);
+
+    $("copiarId").disabled = false;
+    setBox($("genMsg"), "ok", `✅ Guardado. QR generado para ID: <code>${record.id}</code>`);
+    renderList();
+  });
+
+  $("limpiarGen").onclick = () => {
     $("producto").value = "";
+    $("origen").value = "";
+    $("funcion").value = "";
     $("destino").value = "";
     $("nota").value = "";
-    setMsg("warn", "Escanea un QR para empezar.");
-    $("guardarBtn").disabled = true;
-    $("buscarBtn").disabled = true;
-    $("recibidoBtn").disabled = true;
-  }
+    $("idGenerado").textContent = "—";
+    $("qrcode").innerHTML = "";
+    $("copiarId").disabled = true;
+    $("genMsg").innerHTML = "";
+  };
 
-  // ===== QR Scanner =====
+  $("copiarId").onclick = async () => {
+    const id = $("idGenerado").textContent;
+    if(!id || id==="—") return;
+    try{
+      await navigator.clipboard.writeText(id);
+      setBox($("genMsg"), "ok", `📋 ID copiado: <code>${id}</code>`);
+    }catch(e){
+      setBox($("genMsg"), "warn", `No se pudo copiar automáticamente. Copia manual: <code>${id}</code>`);
+    }
+  };
+
+  // ====== QR Scan ======
   let html5QrCode = null;
 
-  function onScanSuccess(decodedText) {
-    $("qrText").textContent = decodedText;
-    $("guardarBtn").disabled = false;
-    $("buscarBtn").disabled = false;
+  function showRecordById(id){
+    $("idEscaneado").textContent = id;
 
-    // Intentar cargar si ya existe
-    loadRecord(decodedText, true);
+    const raw = localStorage.getItem(key(id));
+    if(!raw){
+      setBox($("datosBox"), "err", `❌ No existe un registro guardado para ID: <code>${escapeHTML(id)}</code>`);
+      $("marcarRecibido").disabled = true;
+      $("borrarRegistro").disabled = true;
+      return;
+    }
+
+    const r = JSON.parse(raw);
+
+    const status = r.recibido
+      ? `<div class="ok"><b>Estado:</b> Recibido ✅<br/><span class="muted">${r.recibido_en}</span></div>`
+      : `<div class="warn"><b>Estado:</b> Pendiente ⏳</div>`;
+
+    setBox($("datosBox"), "ok", `
+      ${status}
+      <table>
+        <tr><td>ID</td><td><code>${escapeHTML(r.id)}</code></td></tr>
+        <tr><td>Producto</td><td>${escapeHTML(r.producto)}</td></tr>
+        <tr><td>Origen</td><td>${escapeHTML(r.origen)}</td></tr>
+        <tr><td>Función</td><td>${escapeHTML(r.funcion)}</td></tr>
+        <tr><td>Destino</td><td>${escapeHTML(r.destino)}</td></tr>
+        ${r.nota ? `<tr><td>Nota</td><td>${escapeHTML(r.nota)}</td></tr>` : ""}
+        <tr><td>Creado</td><td class="muted">${escapeHTML(r.creado_en || "—")}</td></tr>
+      </table>
+    `);
+
+    $("marcarRecibido").disabled = r.recibido; // si ya recibido, deshabilita
+    $("borrarRegistro").disabled = false;
   }
 
-  async function startScanner() {
-    $("scanMsg").textContent = "Iniciando cámara...";
-    if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+  function onScanSuccess(decodedText){
+    // QR contiene el ID
+    showRecordById(decodedText.trim());
+  }
 
-    try {
-      const cameras = await Html5Qrcode.getCameras();
-      if (!cameras || cameras.length === 0) {
+  async function startScanner(){
+    $("scanMsg").textContent = "Iniciando cámara...";
+    if(!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+
+    try{
+      const cams = await Html5Qrcode.getCameras();
+      if(!cams || cams.length===0){
         $("scanMsg").textContent = "No se detectaron cámaras.";
         return;
       }
@@ -158,206 +308,99 @@
       );
 
       $("scanMsg").textContent = "Cámara activa. Enfoca el QR.";
-    } catch (err) {
+    }catch(err){
       $("scanMsg").textContent = "Error al iniciar cámara: " + err;
       $("startBtn").disabled = false;
       $("stopBtn").disabled = true;
     }
   }
 
-  async function stopScanner() {
-    if (!html5QrCode) return;
-    try {
+  async function stopScanner(){
+    if(!html5QrCode) return;
+    try{
       await html5QrCode.stop();
       await html5QrCode.clear();
       $("scanMsg").textContent = "Cámara detenida.";
-    } catch (e) {}
+    }catch(e){}
     $("startBtn").disabled = false;
     $("stopBtn").disabled = true;
   }
 
-  // ===== Data logic =====
-  function saveRecord(qr) {
-    const record = {
-      qr,
-      vivienda: $("vivienda").value.trim(),
-      producto: $("producto").value.trim(),
-      destino: $("destino").value.trim(),
-      nota: $("nota").value.trim(),
-      creado_en: nowISO(),
-      recibido: false,
-      recibido_en: null
-    };
+  $("startBtn").onclick = startScanner;
+  $("stopBtn").onclick = stopScanner;
 
-    localStorage.setItem(storageKey(qr), JSON.stringify(record));
-    setMsg("ok", `✅ Guardado. QR: <code>${qr}</code>`);
-    $("recibidoBtn").disabled = false;
+  $("marcarRecibido").onclick = () => {
+    const id = $("idEscaneado").textContent;
+    if(!id || id==="—") return;
+
+    const raw = localStorage.getItem(key(id));
+    if(!raw) return;
+
+    const r = JSON.parse(raw);
+    r.recibido = true;
+    r.recibido_en = nowISO();
+    localStorage.setItem(key(id), JSON.stringify(r));
+    showRecordById(id);
     renderList();
-  }
+  };
 
-  function loadRecord(qr, silent = false) {
-    const raw = localStorage.getItem(storageKey(qr));
-    if (!raw) {
-      if (!silent) setMsg("warn", `No hay registro para QR: <code>${qr}</code>. Llena datos y guarda.`);
-      $("recibidoBtn").disabled = true;
-      return null;
-    }
-
-    const record = JSON.parse(raw);
-    $("vivienda").value = record.vivienda || "";
-    $("producto").value = record.producto || "";
-    $("destino").value = record.destino || "";
-    $("nota").value = record.nota || "";
-
-    $("recibidoBtn").disabled = false;
-
-    if (!silent) {
-      if (record.recibido) {
-        setMsg("ok", `📦 Ya fue marcado como <b>recibido</b> el <code>${record.recibido_en}</code>.`);
-      } else {
-        setMsg("ok", `Encontrado. Aún no está recibido. Puedes marcarlo como recibido.`);
-      }
-    } else {
-      // cuando escanea, no spamear demasiado, pero sí habilitar botón
-      if (record.recibido) {
-        setMsg("ok", `📦 QR encontrado. Estado: <b>recibido</b> ✅`);
-      } else {
-        setMsg("warn", `QR encontrado. Estado: <b>pendiente</b> ⏳`);
-      }
-    }
-
-    return record;
-  }
-
-  function markReceived(qr) {
-    const rec = loadRecord(qr, true);
-    if (!rec) {
-      setMsg("err", `❌ No existe registro para QR: <code>${qr}</code>. Primero guárdalo.`);
-      return;
-    }
-    rec.recibido = true;
-    rec.recibido_en = nowISO();
-    localStorage.setItem(storageKey(qr), JSON.stringify(rec));
-    setMsg("ok", `✅ Marcado como recibido. Fecha: <code>${rec.recibido_en}</code>`);
+  $("borrarRegistro").onclick = () => {
+    const id = $("idEscaneado").textContent;
+    if(!id || id==="—") return;
+    if(!confirm("¿Borrar este registro?")) return;
+    localStorage.removeItem(key(id));
+    setBox($("datosBox"), "warn", "Registro borrado. Escanea otro QR.");
+    $("marcarRecibido").disabled = true;
+    $("borrarRegistro").disabled = true;
     renderList();
-  }
+  };
 
-  function renderList() {
-    const container = $("lista");
+  // ====== Lista ======
+  function renderList(){
     const items = [];
-    for (let i = 0; i < localStorage.length; i++) {
+    for(let i=0; i<localStorage.length; i++){
       const k = localStorage.key(i);
-      if (k && k.startsWith("envio:")) {
-        const rec = JSON.parse(localStorage.getItem(k));
-        items.push(rec);
+      if(k && k.startsWith("prod:")){
+        items.push(JSON.parse(localStorage.getItem(k)));
       }
     }
+    items.sort((a,b)=> (b.creado_en||"").localeCompare(a.creado_en||""));
 
-    items.sort((a,b) => (b.creado_en || "").localeCompare(a.creado_en || ""));
-
-    if (items.length === 0) {
-      container.innerHTML = `<p class="muted">No hay registros guardados.</p>`;
+    const box = $("lista");
+    if(items.length===0){
+      box.innerHTML = `<p class="muted">No hay registros guardados.</p>`;
       return;
     }
 
-    container.innerHTML = items.map(r => `
+    box.innerHTML = items.map(r => `
       <div class="card" style="margin-top:10px;">
-        <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-          <div>
-            <b>QR:</b> <code>${r.qr}</code><br/>
-            <b>Vivienda:</b> ${escapeHTML(r.vivienda)}<br/>
-            <b>Producto:</b> ${escapeHTML(r.producto)}<br/>
-            <b>Destino:</b> ${escapeHTML(r.destino)}<br/>
-            <span class="muted">Creado: ${r.creado_en || "—"}</span>
-          </div>
-          <div>
-            ${r.recibido
-              ? `<div class="ok">Recibido ✅<br/><span class="muted">${r.recibido_en}</span></div>`
-              : `<div class="warn">Pendiente ⏳</div>`
-            }
-            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn2" onclick="window.__loadFromList('${encodeURIComponent(r.qr)}')">Cargar</button>
-              <button class="btn" onclick="window.__receiveFromList('${encodeURIComponent(r.qr)}')">Recibido</button>
-              <button class="btn3" onclick="window.__deleteFromList('${encodeURIComponent(r.qr)}')">Borrar</button>
-            </div>
-          </div>
+        <b>ID:</b> <code>${escapeHTML(r.id)}</code><br/>
+        <b>Producto:</b> ${escapeHTML(r.producto)}<br/>
+        <b>Destino:</b> ${escapeHTML(r.destino)}<br/>
+        <b>Estado:</b> ${r.recibido ? "Recibido ✅" : "Pendiente ⏳"}<br/>
+        <span class="muted">${escapeHTML(r.creado_en || "")}</span>
+        <div class="rowBtns">
+          <button class="btn2" onclick="(function(){ show('scan'); showRecordById('${encodeURIComponent(r.id)}'); })()">Ver</button>
+          <button class="btn3" onclick="(function(){ localStorage.removeItem('${"prod:" + r.id}'); renderList(); })()">Borrar</button>
         </div>
-        ${r.nota ? `<p><b>Nota:</b> ${escapeHTML(r.nota)}</p>` : ""}
       </div>
     `).join("");
   }
 
-  function escapeHTML(str) {
-    return (str || "").replace(/[&<>"']/g, (m) => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-    }[m]));
-  }
-
-  // Exponer funciones para botones dentro del HTML generado
-  window.__loadFromList = (qrEnc) => {
-    const qr = decodeURIComponent(qrEnc);
-    $("qrText").textContent = qr;
-    $("guardarBtn").disabled = false;
-    $("buscarBtn").disabled = false;
-    loadRecord(qr, false);
-  };
-  window.__receiveFromList = (qrEnc) => markReceived(decodeURIComponent(qrEnc));
-  window.__deleteFromList = (qrEnc) => {
-    const qr = decodeURIComponent(qrEnc);
-    localStorage.removeItem(storageKey(qr));
-    setMsg("warn", `🗑️ Borrado registro QR: <code>${qr}</code>`);
-    renderList();
-  };
-
-  // ===== Events =====
-  $("startBtn").addEventListener("click", startScanner);
-  $("stopBtn").addEventListener("click", stopScanner);
-
-  $("buscarBtn").addEventListener("click", () => {
-    const qr = getCurrentQR();
-    if (!qr) return setMsg("warn", "Escanea un QR primero.");
-    loadRecord(qr, false);
-  });
-
-  $("formEnvio").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const qr = getCurrentQR();
-    if (!qr) return setMsg("warn", "Escanea un QR primero.");
-
-    // validación simple
-    if (!$("vivienda").value.trim() || !$("producto").value.trim() || !$("destino").value.trim()) {
-      return setMsg("err", "❌ Completa vivienda, producto y destino.");
-    }
-    saveRecord(qr);
-  });
-
-  $("recibidoBtn").addEventListener("click", () => {
-    const qr = getCurrentQR();
-    if (!qr) return setMsg("warn", "Escanea un QR primero.");
-    markReceived(qr);
-  });
-
-  $("limpiarBtn").addEventListener("click", () => {
-    $("qrText").textContent = "—";
-    resetForm();
-  });
-
-  $("refrescarLista").addEventListener("click", renderList);
-
-  $("borrarTodo").addEventListener("click", () => {
-    if (!confirm("¿Seguro que quieres borrar TODOS los registros de este dispositivo?")) return;
-    const keysToDelete = [];
-    for (let i = 0; i < localStorage.length; i++) {
+  $("refrescar").onclick = renderList;
+  $("borrarTodo").onclick = () => {
+    if(!confirm("¿Borrar TODOS los registros de este dispositivo?")) return;
+    const keys = [];
+    for(let i=0; i<localStorage.length; i++){
       const k = localStorage.key(i);
-      if (k && k.startsWith("envio:")) keysToDelete.push(k);
+      if(k && k.startsWith("prod:")) keys.push(k);
     }
-    keysToDelete.forEach(k => localStorage.removeItem(k));
-    setMsg("warn", "🗑️ Todo borrado.");
+    keys.forEach(k=>localStorage.removeItem(k));
     renderList();
-  });
+    alert("Listo, todo borrado.");
+  };
 
   // Init
-  resetForm();
   renderList();
 </script>
 </body>
