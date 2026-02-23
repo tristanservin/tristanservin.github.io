@@ -1,131 +1,364 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Registro de horas de estudio</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Registro por QR</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 720px; margin: 30px auto; padding: 0 16px; }
-    h1 { font-size: 22px; }
-    .row { margin: 10px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    input { padding: 8px; font-size: 14px; }
-    button { padding: 8px 12px; font-size: 14px; cursor: pointer; }
-    #daysInputs > div { margin: 8px 0; }
-    .result { margin-top: 18px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
-    .muted { color: #666; font-size: 13px; }
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 0 12px; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 820px) { .row { grid-template-columns: 1fr 1fr; } }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 14px; }
+    label { display:block; margin: 10px 0 6px; font-weight: 600; }
+    input, select, textarea { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ccc; }
+    button { padding: 10px 14px; border: 0; border-radius: 10px; cursor: pointer; }
+    .btn { background:#0b5; color:#fff; }
+    .btn2 { background:#06c; color:#fff; }
+    .btn3 { background:#666; color:#fff; }
+    .warn { background:#ffe9a8; padding: 10px; border-radius: 10px; }
+    .ok { background:#d8ffd8; padding: 10px; border-radius: 10px; }
+    .err { background:#ffd8d8; padding: 10px; border-radius: 10px; }
+    .muted { color:#666; font-size: .92rem; }
+    code { background:#f2f2f2; padding: 2px 6px; border-radius: 6px; }
   </style>
+
+  <!-- Librería para escanear QR (cámara) -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
+
 <body>
-
-  <h1>Registro de horas de estudio</h1>
-
-  <div class="row">
-    <label for="dias"><strong>¿Cuántos días quieres registrar?</strong></label>
-    <input id="dias" type="number" min="0" step="1" placeholder="Ej. 5" />
-    <button id="btnGenerar">Generar días</button>
-  </div>
-
-  <p class="muted">Después de generar, escribe las horas de cada día y presiona “Calcular”.</p>
-
-  <div id="daysInputs"></div>
+  <h1>📦 Registro y Recepción por QR</h1>
+  <p class="muted">
+    Flujo: <b>Escanear QR</b> → llenar datos → <b>Guardar</b>.  
+    En llegada: <b>Escanear QR</b> → <b>Marcar recibido</b>.
+  </p>
 
   <div class="row">
-    <button id="btnCalcular" disabled>Calcular</button>
-    <button id="btnLimpiar">Limpiar</button>
+    <div class="card">
+      <h2>1) Escanear QR</h2>
+      <p class="muted">Permite cámara. En GitHub Pages funciona (HTTPS).</p>
+
+      <div id="reader" style="width:100%;"></div>
+
+      <p><b>QR detectado:</b> <code id="qrText">—</code></p>
+
+      <div style="display:flex; gap:10px; flex-wrap: wrap;">
+        <button class="btn3" id="startBtn">Iniciar cámara</button>
+        <button class="btn3" id="stopBtn" disabled>Detener</button>
+        <button class="btn2" id="buscarBtn" disabled>Buscar registro</button>
+      </div>
+
+      <p id="scanMsg" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h2>2) Datos del envío</h2>
+
+      <div class="warn">
+        Este demo guarda en el navegador (localStorage).  
+        Si borras datos del navegador o cambias de dispositivo, se pierde.
+      </div>
+
+      <form id="formEnvio">
+        <label for="vivienda">Vivienda (ej. Casa 12 / Dept 3B)</label>
+        <input id="vivienda" required placeholder="Ej: Casa 12" />
+
+        <label for="producto">Producto</label>
+        <input id="producto" required placeholder="Ej: Cemento 50kg" />
+
+        <label for="destino">¿Para dónde va?</label>
+        <input id="destino" required placeholder="Ej: Bodega Norte / Obra X" />
+
+        <label for="nota">Nota (opcional)</label>
+        <textarea id="nota" rows="3" placeholder="Detalles extra..."></textarea>
+
+        <div style="display:flex; gap:10px; margin-top: 12px; flex-wrap: wrap;">
+          <button type="submit" class="btn" id="guardarBtn" disabled>Guardar envío</button>
+          <button type="button" class="btn2" id="recibidoBtn" disabled>Marcar como recibido</button>
+          <button type="button" class="btn3" id="limpiarBtn">Limpiar</button>
+        </div>
+      </form>
+
+      <div id="estadoBox" style="margin-top:12px;"></div>
+    </div>
   </div>
 
-  <div id="output" class="result" style="display:none;"></div>
+  <div class="card" style="margin-top: 12px;">
+    <h2>📋 Registros guardados (este dispositivo)</h2>
+    <button class="btn3" id="refrescarLista">Refrescar lista</button>
+    <button class="btn3" id="borrarTodo">Borrar todo</button>
+    <div id="lista" style="margin-top: 10px;"></div>
+  </div>
 
-  <script>
-    const diasInput = document.getElementById("dias");
-    const btnGenerar = document.getElementById("btnGenerar");
-    const btnCalcular = document.getElementById("btnCalcular");
-    const btnLimpiar = document.getElementById("btnLimpiar");
-    const daysInputs = document.getElementById("daysInputs");
-    const output = document.getElementById("output");
+<script>
+  // ===== Helpers =====
+  const $ = (id) => document.getElementById(id);
 
-    function crearInputsDias(dias) {
-      daysInputs.innerHTML = "";
-      output.style.display = "none";
-      output.innerHTML = "";
+  function nowISO() {
+    return new Date().toISOString();
+  }
 
-      if (!Number.isFinite(dias) || dias <= 0) {
-        btnCalcular.disabled = true;
+  function storageKey(qr) {
+    return "envio:" + qr;
+  }
+
+  function setMsg(type, text) {
+    const box = $("estadoBox");
+    const cls = type === "ok" ? "ok" : type === "err" ? "err" : "warn";
+    box.innerHTML = `<div class="${cls}">${text}</div>`;
+  }
+
+  function getCurrentQR() {
+    return $("qrText").textContent && $("qrText").textContent !== "—"
+      ? $("qrText").textContent
+      : null;
+  }
+
+  function resetForm() {
+    $("vivienda").value = "";
+    $("producto").value = "";
+    $("destino").value = "";
+    $("nota").value = "";
+    setMsg("warn", "Escanea un QR para empezar.");
+    $("guardarBtn").disabled = true;
+    $("buscarBtn").disabled = true;
+    $("recibidoBtn").disabled = true;
+  }
+
+  // ===== QR Scanner =====
+  let html5QrCode = null;
+
+  function onScanSuccess(decodedText) {
+    $("qrText").textContent = decodedText;
+    $("guardarBtn").disabled = false;
+    $("buscarBtn").disabled = false;
+
+    // Intentar cargar si ya existe
+    loadRecord(decodedText, true);
+  }
+
+  async function startScanner() {
+    $("scanMsg").textContent = "Iniciando cámara...";
+    if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+
+    try {
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras || cameras.length === 0) {
+        $("scanMsg").textContent = "No se detectaron cámaras.";
         return;
       }
 
-      for (let i = 1; i <= dias; i++) {
-        const wrapper = document.createElement("div");
-        wrapper.className = "row";
+      $("startBtn").disabled = true;
+      $("stopBtn").disabled = false;
 
-        const label = document.createElement("label");
-        label.textContent = `Horas estudiadas el día ${i}:`;
-        label.setAttribute("for", `horas_${i}`);
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess
+      );
 
-        const input = document.createElement("input");
-        input.type = "number";
-        input.min = "0";
-        input.step = "0.25";
-        input.placeholder = "Ej. 2.5";
-        input.id = `horas_${i}`;
-        input.className = "horas";
+      $("scanMsg").textContent = "Cámara activa. Enfoca el QR.";
+    } catch (err) {
+      $("scanMsg").textContent = "Error al iniciar cámara: " + err;
+      $("startBtn").disabled = false;
+      $("stopBtn").disabled = true;
+    }
+  }
 
-        wrapper.appendChild(label);
-        wrapper.appendChild(input);
-        daysInputs.appendChild(wrapper);
-      }
+  async function stopScanner() {
+    if (!html5QrCode) return;
+    try {
+      await html5QrCode.stop();
+      await html5QrCode.clear();
+      $("scanMsg").textContent = "Cámara detenida.";
+    } catch (e) {}
+    $("startBtn").disabled = false;
+    $("stopBtn").disabled = true;
+  }
 
-      btnCalcular.disabled = false;
+  // ===== Data logic =====
+  function saveRecord(qr) {
+    const record = {
+      qr,
+      vivienda: $("vivienda").value.trim(),
+      producto: $("producto").value.trim(),
+      destino: $("destino").value.trim(),
+      nota: $("nota").value.trim(),
+      creado_en: nowISO(),
+      recibido: false,
+      recibido_en: null
+    };
+
+    localStorage.setItem(storageKey(qr), JSON.stringify(record));
+    setMsg("ok", `✅ Guardado. QR: <code>${qr}</code>`);
+    $("recibidoBtn").disabled = false;
+    renderList();
+  }
+
+  function loadRecord(qr, silent = false) {
+    const raw = localStorage.getItem(storageKey(qr));
+    if (!raw) {
+      if (!silent) setMsg("warn", `No hay registro para QR: <code>${qr}</code>. Llena datos y guarda.`);
+      $("recibidoBtn").disabled = true;
+      return null;
     }
 
-    function calcular() {
-      const dias = parseInt(diasInput.value, 10) || 0;
-      let total_horas = 0;
+    const record = JSON.parse(raw);
+    $("vivienda").value = record.vivienda || "";
+    $("producto").value = record.producto || "";
+    $("destino").value = record.destino || "";
+    $("nota").value = record.nota || "";
 
-      const inputs = document.querySelectorAll(".horas");
+    $("recibidoBtn").disabled = false;
 
-      // Suma segura (si el campo está vacío, cuenta como 0)
-      inputs.forEach(inp => {
-        const val = parseFloat(inp.value);
-        total_horas += Number.isFinite(val) ? val : 0;
-      });
-
-      const promedio = dias > 0 ? total_horas / dias : 0;
-
-      let nivel = "";
-      if (promedio >= 4) {
-        nivel = "Excelente disciplina";
-      } else if (promedio >= 2) {
-        nivel = "Buena disciplina";
+    if (!silent) {
+      if (record.recibido) {
+        setMsg("ok", `📦 Ya fue marcado como <b>recibido</b> el <code>${record.recibido_en}</code>.`);
       } else {
-        nivel = "Necesitas mejorar tu disciplina";
+        setMsg("ok", `Encontrado. Aún no está recibido. Puedes marcarlo como recibido.`);
       }
-
-      output.style.display = "block";
-      output.innerHTML = `
-        <h2 style="margin:0 0 10px;">RESULTADOS</h2>
-        <p><strong>Total de horas estudiadas:</strong> ${total_horas} horas</p>
-        <p><strong>Promedio diario:</strong> ${promedio.toFixed(2)} horas</p>
-        <p><strong>Evaluación:</strong> ${nivel}</p>
-      `;
+    } else {
+      // cuando escanea, no spamear demasiado, pero sí habilitar botón
+      if (record.recibido) {
+        setMsg("ok", `📦 QR encontrado. Estado: <b>recibido</b> ✅`);
+      } else {
+        setMsg("warn", `QR encontrado. Estado: <b>pendiente</b> ⏳`);
+      }
     }
 
-    function limpiar() {
-      diasInput.value = "";
-      daysInputs.innerHTML = "";
-      output.style.display = "none";
-      output.innerHTML = "";
-      btnCalcular.disabled = true;
+    return record;
+  }
+
+  function markReceived(qr) {
+    const rec = loadRecord(qr, true);
+    if (!rec) {
+      setMsg("err", `❌ No existe registro para QR: <code>${qr}</code>. Primero guárdalo.`);
+      return;
+    }
+    rec.recibido = true;
+    rec.recibido_en = nowISO();
+    localStorage.setItem(storageKey(qr), JSON.stringify(rec));
+    setMsg("ok", `✅ Marcado como recibido. Fecha: <code>${rec.recibido_en}</code>`);
+    renderList();
+  }
+
+  function renderList() {
+    const container = $("lista");
+    const items = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("envio:")) {
+        const rec = JSON.parse(localStorage.getItem(k));
+        items.push(rec);
+      }
     }
 
-    btnGenerar.addEventListener("click", () => {
-      const dias = parseInt(diasInput.value, 10);
-      crearInputsDias(dias);
-    });
+    items.sort((a,b) => (b.creado_en || "").localeCompare(a.creado_en || ""));
 
-    btnCalcular.addEventListener("click", calcular);
-    btnLimpiar.addEventListener("click", limpiar);
-  </script>
+    if (items.length === 0) {
+      container.innerHTML = `<p class="muted">No hay registros guardados.</p>`;
+      return;
+    }
 
+    container.innerHTML = items.map(r => `
+      <div class="card" style="margin-top:10px;">
+        <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <div>
+            <b>QR:</b> <code>${r.qr}</code><br/>
+            <b>Vivienda:</b> ${escapeHTML(r.vivienda)}<br/>
+            <b>Producto:</b> ${escapeHTML(r.producto)}<br/>
+            <b>Destino:</b> ${escapeHTML(r.destino)}<br/>
+            <span class="muted">Creado: ${r.creado_en || "—"}</span>
+          </div>
+          <div>
+            ${r.recibido
+              ? `<div class="ok">Recibido ✅<br/><span class="muted">${r.recibido_en}</span></div>`
+              : `<div class="warn">Pendiente ⏳</div>`
+            }
+            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn2" onclick="window.__loadFromList('${encodeURIComponent(r.qr)}')">Cargar</button>
+              <button class="btn" onclick="window.__receiveFromList('${encodeURIComponent(r.qr)}')">Recibido</button>
+              <button class="btn3" onclick="window.__deleteFromList('${encodeURIComponent(r.qr)}')">Borrar</button>
+            </div>
+          </div>
+        </div>
+        ${r.nota ? `<p><b>Nota:</b> ${escapeHTML(r.nota)}</p>` : ""}
+      </div>
+    `).join("");
+  }
+
+  function escapeHTML(str) {
+    return (str || "").replace(/[&<>"']/g, (m) => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    }[m]));
+  }
+
+  // Exponer funciones para botones dentro del HTML generado
+  window.__loadFromList = (qrEnc) => {
+    const qr = decodeURIComponent(qrEnc);
+    $("qrText").textContent = qr;
+    $("guardarBtn").disabled = false;
+    $("buscarBtn").disabled = false;
+    loadRecord(qr, false);
+  };
+  window.__receiveFromList = (qrEnc) => markReceived(decodeURIComponent(qrEnc));
+  window.__deleteFromList = (qrEnc) => {
+    const qr = decodeURIComponent(qrEnc);
+    localStorage.removeItem(storageKey(qr));
+    setMsg("warn", `🗑️ Borrado registro QR: <code>${qr}</code>`);
+    renderList();
+  };
+
+  // ===== Events =====
+  $("startBtn").addEventListener("click", startScanner);
+  $("stopBtn").addEventListener("click", stopScanner);
+
+  $("buscarBtn").addEventListener("click", () => {
+    const qr = getCurrentQR();
+    if (!qr) return setMsg("warn", "Escanea un QR primero.");
+    loadRecord(qr, false);
+  });
+
+  $("formEnvio").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const qr = getCurrentQR();
+    if (!qr) return setMsg("warn", "Escanea un QR primero.");
+
+    // validación simple
+    if (!$("vivienda").value.trim() || !$("producto").value.trim() || !$("destino").value.trim()) {
+      return setMsg("err", "❌ Completa vivienda, producto y destino.");
+    }
+    saveRecord(qr);
+  });
+
+  $("recibidoBtn").addEventListener("click", () => {
+    const qr = getCurrentQR();
+    if (!qr) return setMsg("warn", "Escanea un QR primero.");
+    markReceived(qr);
+  });
+
+  $("limpiarBtn").addEventListener("click", () => {
+    $("qrText").textContent = "—";
+    resetForm();
+  });
+
+  $("refrescarLista").addEventListener("click", renderList);
+
+  $("borrarTodo").addEventListener("click", () => {
+    if (!confirm("¿Seguro que quieres borrar TODOS los registros de este dispositivo?")) return;
+    const keysToDelete = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("envio:")) keysToDelete.push(k);
+    }
+    keysToDelete.forEach(k => localStorage.removeItem(k));
+    setMsg("warn", "🗑️ Todo borrado.");
+    renderList();
+  });
+
+  // Init
+  resetForm();
+  renderList();
+</script>
 </body>
 </html>
