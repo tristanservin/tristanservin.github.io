@@ -182,6 +182,10 @@
     }[m]));
   }
 
+  function isValidRecordId(id){
+    return typeof id === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(id);
+  }
+
   function setBox(el, type, html){
     el.className = type;
     el.innerHTML = html;
@@ -493,23 +497,29 @@
     if(mode === "replace") clearAllRecords();
 
     let imported = 0;
+    let skipped = 0;
     records.forEach(r => {
-      if(r && r.id){
+      if(r && isValidRecordId(r.id)){
         localStorage.setItem(key(r.id), JSON.stringify(r));
         imported += 1;
+      }else{
+        skipped += 1;
       }
     });
 
     renderList();
-    return imported;
+    return { imported, skipped };
   }
 
   $("importarDB").onclick = async () => {
     try{
       if(!confirm("Esto reemplazará todos los registros actuales. ¿Continuar?")) return;
       const records = await readImportFile();
-      const imported = importRecords(records, "replace");
-      setBox($("dbMsg"), "ok", `✅ Importación completa (reemplazo): <b>${imported}</b> registros.`);
+      const result = importRecords(records, "replace");
+      const skippedMsg = result.skipped
+        ? ` · ⚠️ Omitidos por ID inválido: <b>${result.skipped}</b>.`
+        : "";
+      setBox($("dbMsg"), "ok", `✅ Importación completa (reemplazo): <b>${result.imported}</b> registros.${skippedMsg}`);
     }catch(err){
       setBox($("dbMsg"), "err", `❌ ${escapeHTML(err.message || String(err))}`);
     }
@@ -518,8 +528,11 @@
   $("mergeDB").onclick = async () => {
     try{
       const records = await readImportFile();
-      const imported = importRecords(records, "merge");
-      setBox($("dbMsg"), "ok", `✅ Importación completa (combinada): <b>${imported}</b> registros.`);
+      const result = importRecords(records, "merge");
+      const skippedMsg = result.skipped
+        ? ` · ⚠️ Omitidos por ID inválido: <b>${result.skipped}</b>.`
+        : "";
+      setBox($("dbMsg"), "ok", `✅ Importación completa (combinada): <b>${result.imported}</b> registros.${skippedMsg}`);
     }catch(err){
       setBox($("dbMsg"), "err", `❌ ${escapeHTML(err.message || String(err))}`);
     }
