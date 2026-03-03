@@ -48,6 +48,7 @@
     <button class="tab active" id="tabGen">🧾 Generar QR</button>
     <button class="tab" id="tabScan">📷 Escanear QR</button>
     <button class="tab" id="tabLista">📋 Lista</button>
+    <button class="tab" id="tabDB">🗄️ Base de datos</button>
   </div>
 
   <!-- GENERAR -->
@@ -85,7 +86,7 @@
       <div class="qrWrap"><div id="qrcode"></div></div>
 
       <div class="warn">
-        Tip: Puedes imprimir esta pantalla o hacer captura.  
+        Tip: Puedes imprimir esta pantalla o hacer captura.
         El QR contiene el ID; al escanearlo se ven los datos.
       </div>
 
@@ -139,6 +140,30 @@
     </div>
   </section>
 
+  <!-- BASE DE DATOS -->
+  <section id="viewDB" style="display:none;">
+    <div class="card">
+      <h2>Base de datos local (JSON)</h2>
+      <p class="muted">
+        Aquí puedes exportar o importar todos los registros <code>prod:</code> guardados en este dispositivo.
+      </p>
+
+      <div class="rowBtns">
+        <button class="btn2" id="exportarDB">Exportar base de datos</button>
+      </div>
+
+      <label for="archivoImportar" style="margin-top:14px;">Importar archivo JSON</label>
+      <input id="archivoImportar" type="file" accept="application/json" />
+
+      <div class="rowBtns">
+        <button class="btn" id="importarDB">Importar y reemplazar</button>
+        <button class="btn3" id="mergeDB">Importar y combinar</button>
+      </div>
+
+      <div id="dbMsg" style="margin-top:12px;"></div>
+    </div>
+  </section>
+
 <script>
   // ====== Helpers ======
   const $ = (id) => document.getElementById(id);
@@ -157,6 +182,10 @@
     }[m]));
   }
 
+  function isValidRecordId(id){
+    return typeof id === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(id);
+  }
+
   function setBox(el, type, html){
     el.className = type;
     el.innerHTML = html;
@@ -167,15 +196,18 @@
     $("viewGen").style.display = view === "gen" ? "" : "none";
     $("viewScan").style.display = view === "scan" ? "" : "none";
     $("viewLista").style.display = view === "lista" ? "" : "none";
+    $("viewDB").style.display = view === "db" ? "" : "none";
 
     $("tabGen").classList.toggle("active", view === "gen");
     $("tabScan").classList.toggle("active", view === "scan");
     $("tabLista").classList.toggle("active", view === "lista");
+    $("tabDB").classList.toggle("active", view === "db");
   }
 
   $("tabGen").onclick = () => show("gen");
   $("tabScan").onclick = () => show("scan");
   $("tabLista").onclick = () => { show("lista"); renderList(); };
+  $("tabDB").onclick = () => show("db");
 
   $("abrirVistaScan").onclick = () => show("scan");
 
@@ -380,7 +412,7 @@
         <b>Estado:</b> ${r.recibido ? "Recibido ✅" : "Pendiente ⏳"}<br/>
         <span class="muted">${escapeHTML(r.creado_en || "")}</span>
         <div class="rowBtns">
-          <button class="btn2" onclick="(function(){ show('scan'); showRecordById('${encodeURIComponent(r.id)}'); })()">Ver</button>
+          <button class="btn2" onclick="(function(){ show('scan'); showRecordById('${escapeHTML(r.id)}'); })()">Ver</button>
           <button class="btn3" onclick="(function(){ localStorage.removeItem('${"prod:" + r.id}'); renderList(); })()">Borrar</button>
         </div>
       </div>
@@ -398,6 +430,112 @@
     keys.forEach(k=>localStorage.removeItem(k));
     renderList();
     alert("Listo, todo borrado.");
+  };
+
+  // ====== Base de datos ======
+  function getRecords(){
+    const items = [];
+    for(let i=0; i<localStorage.length; i++){
+      const k = localStorage.key(i);
+      if(k && k.startsWith("prod:")){
+        items.push(JSON.parse(localStorage.getItem(k)));
+      }
+    }
+    return items;
+  }
+
+  $("exportarDB").onclick = () => {
+    const payload = {
+      exportado_en: nowISO(),
+      total: 0,
+      registros: []
+    };
+
+    payload.registros = getRecords();
+    payload.total = payload.registros.length;
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `inventario-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    setBox($("dbMsg"), "ok", `✅ Exportación lista: <b>${payload.total}</b> registros.`);
+  };
+
+  async function readImportFile(){
+    const file = $("archivoImportar").files[0];
+    if(!file) throw new Error("Selecciona un archivo JSON.");
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+
+    const records = Array.isArray(parsed)
+      ? parsed
+      : (parsed && Array.isArray(parsed.registros) ? parsed.registros : null);
+
+    if(!records){
+      throw new Error("Formato inválido. Usa un array o un objeto con 'registros'.");
+    }
+
+    return records;
+  }
+
+  function clearAllRecords(){
+    const keys = [];
+    for(let i=0; i<localStorage.length; i++){
+      const k = localStorage.key(i);
+      if(k && k.startsWith("prod:")) keys.push(k);
+    }
+    keys.forEach(k => localStorage.removeItem(k));
+  }
+
+  function importRecords(records, mode){
+    if(mode === "replace") clearAllRecords();
+
+    let imported = 0;
+    let skipped = 0;
+    records.forEach(r => {
+      if(r && isValidRecordId(r.id)){
+        localStorage.setItem(key(r.id), JSON.stringify(r));
+        imported += 1;
+      }else{
+        skipped += 1;
+      }
+    });
+
+    renderList();
+    return { imported, skipped };
+  }
+
+  $("importarDB").onclick = async () => {
+    try{
+      if(!confirm("Esto reemplazará todos los registros actuales. ¿Continuar?")) return;
+      const records = await readImportFile();
+      const result = importRecords(records, "replace");
+      const skippedMsg = result.skipped
+        ? ` · ⚠️ Omitidos por ID inválido: <b>${result.skipped}</b>.`
+        : "";
+      setBox($("dbMsg"), "ok", `✅ Importación completa (reemplazo): <b>${result.imported}</b> registros.${skippedMsg}`);
+    }catch(err){
+      setBox($("dbMsg"), "err", `❌ ${escapeHTML(err.message || String(err))}`);
+    }
+  };
+
+  $("mergeDB").onclick = async () => {
+    try{
+      const records = await readImportFile();
+      const result = importRecords(records, "merge");
+      const skippedMsg = result.skipped
+        ? ` · ⚠️ Omitidos por ID inválido: <b>${result.skipped}</b>.`
+        : "";
+      setBox($("dbMsg"), "ok", `✅ Importación completa (combinada): <b>${result.imported}</b> registros.${skippedMsg}`);
+    }catch(err){
+      setBox($("dbMsg"), "err", `❌ ${escapeHTML(err.message || String(err))}`);
+    }
   };
 
   // Init
