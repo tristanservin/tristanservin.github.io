@@ -109,7 +109,7 @@
         <button class="btn3" id="stopBtn" disabled>Detener</button>
       </div>
 
-      <p class="muted" id="scanMsg"></p>
+  <p class="muted" id="scanMsg" aria-live="polite"></p>
       <p><b>ID escaneado:</b> <code id="idEscaneado">—</code></p>
     </div>
 
@@ -132,6 +132,7 @@
         <button class="btn3" id="refrescar">Refrescar</button>
         <button class="btn3" id="borrarTodo">Borrar todo</button>
       </div>
+      <div id="listaMsg" class="muted" aria-live="polite"></div>
       <div id="lista" style="margin-top:12px;"></div>
       <p class="muted">
         Nota: Si quieres que esto funcione para TODOS (varios celulares), hay que guardar en nube (Google Sheets/Firebase).
@@ -142,7 +143,8 @@
 <script>
   // ====== Helpers ======
   const $ = (id) => document.getElementById(id);
-  const key = (id) => "prod:" + id;
+  const PROD_PREFIX = "prod:";
+  const key = (id) => PROD_PREFIX + id;
 
   function nowISO(){ return new Date().toISOString(); }
 
@@ -162,6 +164,43 @@
     el.innerHTML = html;
   }
 
+  function isValidRecord(record){
+    return !!record
+      && typeof record.id === "string" && record.id.trim().length > 0
+      && typeof record.producto === "string"
+      && typeof record.origen === "string"
+      && typeof record.funcion === "string"
+      && typeof record.destino === "string"
+      && (record.nota === undefined || typeof record.nota === "string")
+      && typeof record.recibido === "boolean";
+  }
+
+  function parseStoredRecord(raw){
+    if(typeof raw !== "string") return null;
+    try{
+      const parsed = JSON.parse(raw);
+      if(!isValidRecord(parsed)) return null;
+      return {
+        id: parsed.id,
+        producto: parsed.producto,
+        origen: parsed.origen,
+        funcion: parsed.funcion,
+        destino: parsed.destino,
+        nota: parsed.nota || "",
+        creado_en: parsed.creado_en || "",
+        recibido: parsed.recibido,
+        recibido_en: parsed.recibido_en || null
+      };
+    }catch(_err){
+      return null;
+    }
+  }
+
+  function getRecordById(id){
+    const stored = localStorage.getItem(key(id));
+    return parseStoredRecord(stored);
+  }
+
   // ====== Tabs ======
   function show(view){
     $("viewGen").style.display = view === "gen" ? "" : "none";
@@ -173,11 +212,11 @@
     $("tabLista").classList.toggle("active", view === "lista");
   }
 
-  $("tabGen").onclick = () => show("gen");
-  $("tabScan").onclick = () => show("scan");
-  $("tabLista").onclick = () => { show("lista"); renderList(); };
+  $("tabGen").addEventListener("click", () => show("gen"));
+  $("tabScan").addEventListener("click", () => show("scan"));
+  $("tabLista").addEventListener("click", () => { show("lista"); renderList(); });
 
-  $("abrirVistaScan").onclick = () => show("scan");
+  $("abrirVistaScan").addEventListener("click", () => show("scan"));
 
   // ====== QR Generate ======
   let qrObj = null;
@@ -222,7 +261,7 @@
     renderList();
   });
 
-  $("limpiarGen").onclick = () => {
+  $("limpiarGen").addEventListener("click", () => {
     $("producto").value = "";
     $("origen").value = "";
     $("funcion").value = "";
@@ -232,9 +271,9 @@
     $("qrcode").innerHTML = "";
     $("copiarId").disabled = true;
     $("genMsg").innerHTML = "";
-  };
+  });
 
-  $("copiarId").onclick = async () => {
+  $("copiarId").addEventListener("click", async () => {
     const id = $("idGenerado").textContent;
     if(!id || id==="—") return;
     try{
@@ -243,23 +282,27 @@
     }catch(e){
       setBox($("genMsg"), "warn", `No se pudo copiar automáticamente. Copia manual: <code>${id}</code>`);
     }
-  };
+  });
 
   // ====== QR Scan ======
   let html5QrCode = null;
+  const scanState = {
+    lastId: "",
+    lastAt: 0,
+    cooldownMs: 1500,
+    isHandling: false
+  };
 
   function showRecordById(id){
     $("idEscaneado").textContent = id;
 
-    const raw = localStorage.getItem(key(id));
-    if(!raw){
+    const r = getRecordById(id);
+    if(!r){
       setBox($("datosBox"), "err", `❌ No existe un registro guardado para ID: <code>${escapeHTML(id)}</code>`);
       $("marcarRecibido").disabled = true;
       $("borrarRegistro").disabled = true;
       return;
     }
-
-    const r = JSON.parse(raw);
 
     const status = r.recibido
       ? `<div class="ok"><b>Estado:</b> Recibido ✅<br/><span class="muted">${r.recibido_en}</span></div>`
@@ -283,8 +326,22 @@
   }
 
   function onScanSuccess(decodedText){
-    // QR contiene el ID
-    showRecordById(decodedText.trim());
+    const scannedId = decodedText.trim();
+    const now = Date.now();
+    if(!scannedId) return;
+    if(scanState.isHandling) return;
+    if(scanState.lastId === scannedId && (now - scanState.lastAt) < scanState.cooldownMs){
+      return;
+    }
+
+    scanState.isHandling = true;
+    scanState.lastId = scannedId;
+    scanState.lastAt = now;
+    showRecordById(scannedId);
+    $("scanMsg").textContent = `Lectura detectada: ${scannedId}`;
+    window.setTimeout(() => {
+      scanState.isHandling = false;
+    }, 250);
   }
 
   async function startScanner(){
@@ -326,25 +383,23 @@
     $("stopBtn").disabled = true;
   }
 
-  $("startBtn").onclick = startScanner;
-  $("stopBtn").onclick = stopScanner;
+  $("startBtn").addEventListener("click", startScanner);
+  $("stopBtn").addEventListener("click", stopScanner);
 
-  $("marcarRecibido").onclick = () => {
+  $("marcarRecibido").addEventListener("click", () => {
     const id = $("idEscaneado").textContent;
     if(!id || id==="—") return;
 
-    const raw = localStorage.getItem(key(id));
-    if(!raw) return;
-
-    const r = JSON.parse(raw);
+    const r = getRecordById(id);
+    if(!r) return;
     r.recibido = true;
     r.recibido_en = nowISO();
     localStorage.setItem(key(id), JSON.stringify(r));
     showRecordById(id);
     renderList();
-  };
+  });
 
-  $("borrarRegistro").onclick = () => {
+  $("borrarRegistro").addEventListener("click", () => {
     const id = $("idEscaneado").textContent;
     if(!id || id==="—") return;
     if(!confirm("¿Borrar este registro?")) return;
@@ -353,52 +408,102 @@
     $("marcarRecibido").disabled = true;
     $("borrarRegistro").disabled = true;
     renderList();
-  };
+  });
 
   // ====== Lista ======
-  function renderList(){
+  function collectRecords({ purgeInvalid = false } = {}){
     const items = [];
+    let invalidCount = 0;
     for(let i=0; i<localStorage.length; i++){
       const k = localStorage.key(i);
-      if(k && k.startsWith("prod:")){
-        items.push(JSON.parse(localStorage.getItem(k)));
+      if(k && k.startsWith(PROD_PREFIX)){
+        const parsed = parseStoredRecord(localStorage.getItem(k));
+        if(parsed){
+          items.push(parsed);
+        }else{
+          invalidCount += 1;
+          if(purgeInvalid) localStorage.removeItem(k);
+        }
       }
     }
+
+    return { items, invalidCount };
+  }
+
+  function renderList(){
+    const { items, invalidCount } = collectRecords({ purgeInvalid: true });
     items.sort((a,b)=> (b.creado_en||"").localeCompare(a.creado_en||""));
 
     const box = $("lista");
+    const msg = $("listaMsg");
+    msg.textContent = invalidCount > 0
+      ? `Se omitieron y limpiaron ${invalidCount} registro(s) inválido(s) de localStorage.`
+      : "";
+
     if(items.length===0){
       box.innerHTML = `<p class="muted">No hay registros guardados.</p>`;
       return;
     }
 
-    box.innerHTML = items.map(r => `
-      <div class="card" style="margin-top:10px;">
+    box.innerHTML = "";
+    items.forEach((r) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.marginTop = "10px";
+
+      const meta = document.createElement("div");
+      meta.innerHTML = `
         <b>ID:</b> <code>${escapeHTML(r.id)}</code><br/>
         <b>Producto:</b> ${escapeHTML(r.producto)}<br/>
         <b>Destino:</b> ${escapeHTML(r.destino)}<br/>
         <b>Estado:</b> ${r.recibido ? "Recibido ✅" : "Pendiente ⏳"}<br/>
-        <span class="muted">${escapeHTML(r.creado_en || "")}</span>
-        <div class="rowBtns">
-          <button class="btn2" onclick="(function(){ show('scan'); showRecordById('${encodeURIComponent(r.id)}'); })()">Ver</button>
-          <button class="btn3" onclick="(function(){ localStorage.removeItem('${"prod:" + r.id}'); renderList(); })()">Borrar</button>
-        </div>
-      </div>
-    `).join("");
+      `;
+
+      const date = document.createElement("span");
+      date.className = "muted";
+      date.textContent = r.creado_en || "";
+
+      const row = document.createElement("div");
+      row.className = "rowBtns";
+
+      const viewBtn = document.createElement("button");
+      viewBtn.className = "btn2";
+      viewBtn.textContent = "Ver";
+      viewBtn.addEventListener("click", () => {
+        show("scan");
+        showRecordById(r.id);
+      });
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn3";
+      delBtn.textContent = "Borrar";
+      delBtn.addEventListener("click", () => {
+        localStorage.removeItem(key(r.id));
+        renderList();
+      });
+
+      row.appendChild(viewBtn);
+      row.appendChild(delBtn);
+
+      card.appendChild(meta);
+      card.appendChild(date);
+      card.appendChild(row);
+      box.appendChild(card);
+    });
   }
 
-  $("refrescar").onclick = renderList;
-  $("borrarTodo").onclick = () => {
+  $("refrescar").addEventListener("click", renderList);
+  $("borrarTodo").addEventListener("click", () => {
     if(!confirm("¿Borrar TODOS los registros de este dispositivo?")) return;
     const keys = [];
     for(let i=0; i<localStorage.length; i++){
       const k = localStorage.key(i);
-      if(k && k.startsWith("prod:")) keys.push(k);
+      if(k && k.startsWith(PROD_PREFIX)) keys.push(k);
     }
     keys.forEach(k=>localStorage.removeItem(k));
     renderList();
     alert("Listo, todo borrado.");
-  };
+  });
 
   // Init
   renderList();
